@@ -1,7 +1,8 @@
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Activation
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import ZeroPadding2D
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Dense
@@ -77,11 +78,79 @@ class VGGNet:
 
 class CountNet:
 
-    def ConvBlock():
-        # conv (1,1) + BN + relu  -> conv(ks,ks) + BN + relu -> conv(1,1) + BN all stride (2,2) 
-        # shortcut conv (1,1), stride(2,2) + BN
-        # add layers
-        # relu
+    def resnet_conv_block(input_tensor, kernel_size, filters, strides=(2,2)):
+        filter1, filter2, filter3 = filters
+
+        if K.image_data_format() == 'channels_last':
+            bn_axis = 3
+        else:
+            bn_axis = 1
+
+        # CONV 1
+        x = Conv2D(filter1, (1,1), strides=strides, kernel_initializer='he_normal')(input_tensor)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+        x = layers.Activation('relu')(x)
+        # CONV 2
+        x = Conv2D(filter2, kernel_size, padding='same', kernel_initializer='he_normal')(input_tensor)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+        x = layers.Activation('relu')(x)
+        # CONV 3
+        x = Conv2D(filter3, (1,1), strides=strides, kernel_initializer='he_normal')(input_tensor)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+        # SHORTCUT
+        shortcut = layers.Conv2D(filters3, (1, 1), strides=strides, kernel_initializer='he_normal')(input_tensor)
+        shortcut = layers.BatchNormalization(axis=bn_axis)(shortcut)
+
+        x = layers.add([x, shortcut])
+        x = layers.Activation('relu')(x)
+        return x
+
+    def resnet_identity_block(input_tensor, kernel_size, filters):
+        filter1, filter2, filter3 = filters
+
+        if K.image_data_format() == 'channels_last':
+            bn_axis = 3
+        else:
+            bn_axis = 1
+
+        x = layers.Conv2D(filters1, (1, 1), kernel_initializer='he_normal')(input_tensor)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+        x = layers.Activation('relu')(x)
+
+        x = layers.Conv2D(filters2, kernel_size, padding='same', kernel_initializer='he_normal')(x)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+        x = layers.Activation('relu')(x)
+
+        x = layers.Conv2D(filters3, (1, 1), kernel_initializer='he_normal')(x)
+        x = layers.BatchNormalization(axis=bn_axis)(x)
+
+        x = layers.add([x, input_tensor])
+        x = layers.Activation('relu')(x)
+        return x
+
+
+    def count_net(img_input, input_shape):
+
+        if K.image_data_format() == 'channels_last':
+            bn_axis = 3
+        else:
+            bn_axis = 1
+        # zero pad the image so border pixels are saved
+        x = ZeroPadding2D(padding=(3, 3))(img_input)
+
+        # MODEL BASE
+        x = Conv2D(16, (7, 7), strides=(2, 2), padding='valid', kernel_initializer='he_normal')(x)
+        x = BatchNormalization(axis=bn_axis)
+        x = Activation('relu')(x)
+        x = ZeroPadding2D(padding=(1, 1))(x)
+        x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+        # ENCODER
+        x = resnet_conv_block(x, (3, 3), 32)(x)
+        x = resnet_identity_block(x, (3, 3), 64)(x)
+        x = resnet_identity_block(x, (3, 3), 128)(x)
+
+        # DECODER
 
 
 
@@ -91,7 +160,7 @@ class CountNet:
         input_shape = (height, width, depth)
 
         # maybe use faster R-CNN to detect object boundaries
-        # use boudning box detection algorithm to detect boxes and just count?
+        # use bounding box detection algorithm to detect boxes and just count?
 
         # architecture:
         #   Conv2D 16
@@ -99,30 +168,3 @@ class CountNet:
         #   decoder ResNet50 block -> Identity 64 - Identity 32 - ConvBlock 16
         #   GlobalAvgPool
         #   Dense
-
-        # # 3 x Conv2D -> MaxPooling2D
-        # model.add(Conv2D(16, (3, 3), padding="same",
-        #                 input_shape=input_shape))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(16, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(16, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(MaxPooling2D(pool_size=(2, 2)))
-        # model.add(Dropout(0.25))
-        # # 3 x Conv2D -> MaxPooling2D
-        # model.add(Conv2D(32, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(32, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(32, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(MaxPooling2D(pool_size=(2, 2)))
-        # model.add(Dropout(0.25))
-        # # 3 x Conv2D
-        # model.add(Conv2D(64, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(64, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(64, (3, 3), padding="same"))
-        # model.add(Activation("relu"))
