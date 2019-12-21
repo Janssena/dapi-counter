@@ -1,7 +1,9 @@
 import re
 import os
 import csv
+import numpy as np
 import pandas as pd
+from sklearn.cluster import KMeans
 
 
 def csv_to_df(path):
@@ -14,7 +16,8 @@ def csv_to_df(path):
 
 def is_processed(filename, processed_files):
     props = get_properties_from_filename(filename)
-    name = '{}-{}-[{}].png'.format(props["id"], props["crop"], str(props["slice"]))
+    name = '{}-{}-[{}].png'.format(props["id"],
+                                   props["crop"], str(props["slice"]))
     return True if any(line.endswith(name) for line in processed_files) else False
 
 
@@ -48,6 +51,17 @@ def write_to_csv(data, file):
         writer = csv.DictWriter(csv_file, fieldnames=header)
         if not file_exist:
             writer.writeheader()
-        print(data)
         writer.writerow(data)
-        print('csv file updated')
+
+
+def find_centroids_in_image(image, threshold, n_clusters, n_init=50):
+    if type(image) is not np.ndarray:
+        raise Exception('image should be a numpy array.')
+    points = np.where(image > threshold)
+    x = points[1]
+    y = points[0]
+    points_len = len(x)
+    points = [[x[i], y[i]] for i in range(points_len)]
+    kmeans = KMeans(init='k-means++',
+                    n_clusters=n_clusters, n_init=n_init).fit(points)
+    return kmeans.cluster_centers_
