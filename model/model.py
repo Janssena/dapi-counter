@@ -142,7 +142,7 @@ def resnet_identity_block(input_tensor, kernel_size, filters):
     return x
 
 
-def count_net(input_shape, input_tensor=None):
+def count_net(input_shape, decoder=False, input_tensor=None):
 
     if K.image_data_format() == 'channels_last':
         bn_axis = 3
@@ -172,20 +172,21 @@ def count_net(input_shape, input_tensor=None):
     x = resnet_identity_block(x, (3, 3), (128, 128, 4*128))
 
     # DECODER
-    x = resnet_identity_block(x, (3, 3), (128, 128, 4*128))
-    x = resnet_identity_block(x, (3, 3), (128, 128, 4*128))
-    x = resnet_conv_block(x, (3, 3), (128, 128, 4*128), strides=(1, 1))
-    x = Conv2DTranspose(128, (3, 3), strides=(2, 2))(x)
-    x = resnet_identity_block(x, (3, 3), (64, 64, 2*64))
-    x = resnet_conv_block(x, (3, 3), (64, 64, 4*64), strides=(1, 1))
-    x = Conv2DTranspose(64, (3, 3), strides=(2, 2))(x)
-    x = resnet_identity_block(x, (3, 3), (32, 32, 2*32))
-    x = resnet_conv_block(x, (3, 3), (32, 32, 4*32), strides=(1, 1))
-    x = Conv2DTranspose(32, (3, 3), strides=(2, 2))(x)
+    if decoder:
+        x = resnet_identity_block(x, (3, 3), (128, 128, 4*128))
+        x = resnet_identity_block(x, (3, 3), (128, 128, 4*128))
+        x = resnet_conv_block(x, (3, 3), (128, 128, 4*128), strides=(1, 1))
+        x = Conv2DTranspose(128, (3, 3), strides=(2, 2))(x)
+        x = resnet_identity_block(x, (3, 3), (64, 64, 2*64))
+        x = resnet_conv_block(x, (3, 3), (64, 64, 4*64), strides=(1, 1))
+        x = Conv2DTranspose(64, (3, 3), strides=(2, 2))(x)
+        x = resnet_identity_block(x, (3, 3), (32, 32, 2*32))
+        x = resnet_conv_block(x, (3, 3), (32, 32, 4*32), strides=(1, 1))
+        x = Conv2DTranspose(32, (3, 3), strides=(2, 2))(x)
 
     # TAIL
     x = GlobalAveragePooling2D()(x)
-    x = Dense(1, activation='sigmoid')(x)
+    x = Dense(1, activation='relu')(x)
 
     inputs = img_input
     model = models.Model(inputs, x, name='countnet')
