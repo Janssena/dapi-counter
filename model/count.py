@@ -10,7 +10,7 @@ from tensorflow.keras import Sequential
 
 
 def count_model(input_shape):
-    """ model that counts cells in image given a binary map"""
+    """model that counts cells in image given a binary map"""
     kernel_size = (3, 3)
     pool_size = (2, 2)
     first_filters = 32
