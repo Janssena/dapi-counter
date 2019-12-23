@@ -8,9 +8,6 @@ from sklearn.cluster import KMeans
 
 def csv_to_df(path):
     df = pd.read_csv(path, header=0)
-    df.crop = df.crop.apply(lambda x: eval(str(x)))
-    df.original_size = df.original_size.apply(lambda x: eval(str(x)))
-    df.locations = df.locations.apply(lambda x: eval(str(x)))
     return df
 
 
@@ -18,7 +15,7 @@ def is_processed(filename, processed_files):
     props = get_properties_from_filename(filename)
     name = '{}-{}-[{}].png'.format(props["id"],
                                    props["crop"], str(props["slice"]))
-    return True if any(line.endswith(name) for line in processed_files) else False
+    return any(line.endswith(name) for line in processed_files)
 
 
 def get_properties_from_filename(filename):
