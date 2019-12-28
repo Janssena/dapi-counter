@@ -1,67 +1,79 @@
-# set the matplotlib backend so figures can be saved in the background
-
 from definitions import PATH
-from dapi_counter.model.model import CountNet
-from dapi_counter.data_farming.helpers import csv_to_df
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
+from model.count import count_model
+from model.model import count_net
+import matplotlib.pyplot as plt
+from datetime import date
 import numpy as np
-import cv2
+import argparse
+import get_data
 import os
 
-# get data and shuffle
-df = csv_to_df(PATH['CSV'])
-df_shuffle = df.sample(frac=1).reset_index(drop=True)
+# logic for parsing arguments
+models = {'count': count_model, 'count_net': count_net, 'mask': 'TODO'}
+sources = {'simcep': get_data.simcep, 'binary': 'TODO'}
 
-# append image and label to data and label array
-data = []
-labels = []
-locations = []
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--model', '-m',
+    help='determines which model to load, should be one of {}'.format(models.keys()))
+parser.add_argument(
+    '--data', '-d',
+    help='determines what data to use, should be one of {}'.format(sources.keys()))
+parser.add_argument('--lr', help='set learning rate, standard at 1e-4')
+parser.add_argument('--bs', help='set batch size, standard at 16')
+parser.add_argument(
+    '--epochs', help='set number of epochs to train for, standard 10')
+args = parser.parse_args()
 
-print("[INFO] preparing data...")
-for i, image in enumerate(df_shuffle['name']):
-    im_path = os.path.join(PATH['IMAGE_OUT'] + image)
-    img = cv2.imread(im_path, )[:, :, :1]  # so size is (256, 256, 1)
-    data.append(img)
-    label = df_shuffle['count'][i]
-    loc = df_shuffle['locations'][i]
-    labels.append(label)
-    locations.append(loc)
+if args.model in models.keys():
+    model = models[args.model]((256, 256, 1))
+else:
+    raise Exception(
+        'Unrecognized model, should be one of {}'.format(models.keys()))
 
-y_factor = max(labels)
-data = np.array(data, dtype="float") / 255.0
-labels = np.array(labels) / y_factor
-locations = np.array(locations)
+if args.data in sources.keys():
+    data, labels = sources[args.data]()
+else:
+    raise Exception(
+        'Unrecognized data source, should be one of {}'.format(sources.keys()))
+
+# constants
+LEARN_RATE = float(args.lr) if args.lr else 1e-5
+BATCH_SIZE = int(args.bs) if args.bs else 20
+EPOCHS = int(args.epochs) if args.epochs else 10
+OPT = Adam(lr=LEARN_RATE, decay=10)
 
 # split in train and test
-(trainX, testX, trainY, testY) = train_test_split(data, labels, test_size=0.25, random_state=42)
-aug = ImageDataGenerator(horizontal_flip=True, vertical_flip=True)
-model = CountNet.build(256, 256, 1)
+(trainX, testX, trainY, testY) = train_test_split(
+    data, labels, test_size=0.25, random_state=42)
 
 # setup training
-BS = 16
-EPOCHS = 10
-opt = Adam(lr=1e-4, decay=10)
-model.compile(optimizer=opt, loss='mean_absolute_percentage_error')
+aug = ImageDataGenerator(horizontal_flip=True,
+                         vertical_flip=True, samplewise_center=True)
+model.compile(optimizer=OPT, loss='mean_absolute_percentage_error')
 
 # train
-print("[INFO] starting training...")
-H = model.fit_generator(
-    aug.flow(trainX, trainY, batch_size=BS),
-    validation_data=(testX, testY),
-    steps_per_epoch=len(trainX) // BS,
-    epochs=EPOCHS
-)
+try:
+    H = model.fit(
+        aug.flow(trainX, trainY, batch_size=BATCH_SIZE),
+        validation_data=(testX, testY),
+        steps_per_epoch=len(trainX) // BATCH_SIZE,
+        epochs=EPOCHS
+    )
+except KeyboardInterrupt:
+    if not input('Save model before stopping? (Y/n) ').lower().startswith('y'):
+        raise
 
 # evaluate
-print("[INFO] evaluating network...")
-predictions = model.predict(testX, batch_size=BS)
-print(mean_absolute_error(testY, predictions * y_factor))
+print("Evaluating network...")
+predictions = model.predict(testX, batch_size=BATCH_SIZE)
+print('MAE:', mean_absolute_error(testY, predictions))
 
-# plot the training loss and accuracy
+# create a figure for the training loss and accuracy
 N = np.arange(0, EPOCHS)
 plt.style.use("ggplot")
 plt.figure()
@@ -71,6 +83,10 @@ plt.title("Training Loss and Accuracy on Dataset")
 plt.xlabel("Epoch #")
 plt.ylabel("Loss/Accuracy")
 plt.legend(loc="upper right")
-plt.show()
 
-# save model
+# save model and figure
+print("Saving model...")
+model_name = '{model}_{date}.h5'.format(
+    model=args.model, date=date.today().strftime("%d-%m-%Y"))
+model.save_weights(os.path.join(PATH['MODEL_OUT'], model_name))
+plt.savefig(os.path.join(PATH['MODEL_OUT'], model_name.replace('.h5', '.png')))
