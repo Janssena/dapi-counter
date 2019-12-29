@@ -5,6 +5,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import mean_absolute_error
 from model.count import count_model
 from model.model import count_net
+from model.mask import u_net, dice_coef, dice_coef_loss
 import matplotlib.pyplot as plt
 from datetime import date
 import numpy as np
@@ -13,8 +14,8 @@ import get_data
 import os
 
 # logic for parsing arguments
-models = {'count': count_model, 'count_net': count_net, 'mask': 'TODO'}
-sources = {'simcep': get_data.simcep, 'binary': 'TODO'}
+models = {'count': count_model, 'count_net': count_net, 'mask': u_net}
+sources = {'simcep': get_data.simcep, 'binary': get_data.simcep_masks}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -54,7 +55,10 @@ OPT = Adam(lr=LEARN_RATE, decay=10)
 # setup training
 aug = ImageDataGenerator(horizontal_flip=True,
                          vertical_flip=True, samplewise_center=True)
-model.compile(optimizer=OPT, loss='mean_absolute_percentage_error')
+if args.model == 'mask':
+    model.compile(optimizer=OPT, loss=dice_coef_loss, metrics=[dice_coef])
+else:
+    model.compile(optimizer=OPT, loss='mean_absolute_percentage_error')
 
 # train
 try:
