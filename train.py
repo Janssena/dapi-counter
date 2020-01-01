@@ -2,6 +2,9 @@ from definitions import PATH
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications.resnet import ResNet50
+from tensorflow.keras.layers import Flatten, Dense
+from tensorflow.keras.models import Model
 from sklearn.metrics import mean_absolute_error
 from model.count import count_model
 from model.model import count_net
@@ -13,10 +16,12 @@ import argparse
 import get_data
 import os
 
-# logic for parsing arguments
-models = {'count': count_model, 'count_net': count_net, 'mask': u_net}
+# argument constants
+models = {'count': count_model, 'count_net': count_net,
+          'mask': u_net, 'resnet': ResNet50}
 sources = {'simcep': get_data.simcep, 'binary': get_data.simcep_masks}
 
+# logic for parsing arguments
 parser = argparse.ArgumentParser()
 parser.add_argument(
     '--model', '-m',
@@ -28,25 +33,40 @@ parser.add_argument('--lr', help='set learning rate, standard at 1e-4')
 parser.add_argument('--bs', help='set batch size, standard at 16')
 parser.add_argument(
     '--epochs', help='set number of epochs to train for, standard 10')
+parser.add_argument(
+    '--resume',
+    help='boolean flag. determines if training should resume with the latest weights',
+    action='store_true')
 args = parser.parse_args()
 
+# constants
+INPUT_SHAPE = (256, 256, 1)
+LEARN_RATE = float(args.lr) if args.lr else 1e-5
+BATCH_SIZE = int(args.bs) if args.bs else 20
+EPOCHS = int(args.epochs) if args.epochs else 10
+OPT = Adam(lr=LEARN_RATE, decay=10)
+
 if args.model in models.keys():
-    model = models[args.model]((256, 256, 1))
+    if args.model == 'resnet':
+        base = ResNet50(include_top=False,
+                        input_shape=INPUT_SHAPE, weights=None)
+        x = Flatten()(base.output)
+        x = Dense(1, activation='relu')(x)
+        model = Model(inputs=base.inputs, outputs=x)
+    else:
+        model = models[args.model](INPUT_SHAPE)
 else:
     raise Exception(
         'Unrecognized model, should be one of {}'.format(models.keys()))
 
 if args.data in sources.keys():
-    data, labels = sources[args.data]()
+    if args.data == 'simcep':
+        data, labels = sources[args.data]('12-var')
+    else:
+        data, labels = sources[args.data]()
 else:
     raise Exception(
         'Unrecognized data source, should be one of {}'.format(sources.keys()))
-
-# constants
-LEARN_RATE = float(args.lr) if args.lr else 1e-5
-BATCH_SIZE = int(args.bs) if args.bs else 20
-EPOCHS = int(args.epochs) if args.epochs else 10
-OPT = Adam(lr=LEARN_RATE, decay=10)
 
 # split in train and test
 (trainX, testX, trainY, testY) = train_test_split(
@@ -60,6 +80,10 @@ if args.model == 'mask':
 else:
     model.compile(optimizer=OPT, loss='mean_absolute_percentage_error')
 
+if args.resume:
+    weights = get_data.latest_weights(args.model)
+    model.load_weights(weights)
+
 # train
 try:
     H = model.fit(
@@ -69,13 +93,14 @@ try:
         epochs=EPOCHS
     )
 except KeyboardInterrupt:
-    if not input('Save model before stopping? (Y/n) ').lower().startswith('y'):
+    if input('\nSave model before stopping? (Y/n) ').lower().startswith('n'):
         raise
 
 # evaluate
 print("Evaluating network...")
 predictions = model.predict(testX, batch_size=BATCH_SIZE)
 print('MAE:', mean_absolute_error(testY, predictions))
+print(predictions)
 
 # create a figure for the training loss and accuracy
 N = np.arange(0, EPOCHS)
