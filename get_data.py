@@ -26,7 +26,7 @@ def simcep(exclude=None):
                 continue
         img_path = os.path.join(data_root, file)
         image = cv2.imread(img_path)[:, :, :1]
-        label = int(df_shuffle['count'][i])
+        label = int(df_shuffle['count'][i]) / 100
         data.append(image)
         labels.append(label)
     return np.array(data), np.array(labels)
@@ -36,7 +36,7 @@ def simcep_masks(exclude=None):
     """
     Grabs and shuffles the simcep mask data from the x-var subfolders, where
     x is one of [4, 6, 8, 12].
-    Optional argument exclude removes on of these entries.
+    Optional argument exclude: string[] removes the listed entries.
     Returns:
     - data (single channel image)
     - labels (single channel mask image)
@@ -46,7 +46,8 @@ def simcep_masks(exclude=None):
     data_root = PATH['SIMCEP']
     options = ['4-var', '6-var', '8-var', '12-var']
     if exclude is not None:
-        options.remove(exclude)
+        for entry in exclude:
+            options.remove(entry)
     for subfolder in options:
         files = os.path.join(data_root, subfolder, '*_RGB_*.png')
         files_shuffle = shuffle(files, random_state=42)
@@ -71,7 +72,7 @@ def latest_weights(model):
     files = glob.glob(weights_path)
     files.sort(key=lambda x: os.path.getmtime(x))
     latest = files[-1]
-    date = latest.split('_')[-1][:-3]
+    date = latest.split('_')[-2][:-3]
     print('[INFO] taking {} model from {} to continue training'.format(
         model, date))
     return latest

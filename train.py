@@ -61,7 +61,7 @@ else:
 
 if args.data in sources.keys():
     if args.data == 'simcep':
-        data, labels = sources[args.data]('12-var')
+        data, labels = sources[args.data]()
     else:
         data, labels = sources[args.data]()
 else:
@@ -78,7 +78,8 @@ aug = ImageDataGenerator(horizontal_flip=True,
 if args.model == 'mask':
     model.compile(optimizer=OPT, loss=dice_coef_loss, metrics=[dice_coef])
 else:
-    model.compile(optimizer=OPT, loss='mean_absolute_percentage_error')
+    model.compile(optimizer=OPT, loss='mean_squared_error')
+
 
 if args.resume:
     weights = get_data.latest_weights(args.model)
@@ -99,8 +100,9 @@ except KeyboardInterrupt:
 # evaluate
 print("Evaluating network...")
 predictions = model.predict(testX, batch_size=BATCH_SIZE)
-print('MAE:', mean_absolute_error(testY, predictions))
-print(predictions)
+mae = mean_absolute_error(testY, predictions)
+print('MAE:', mae)
+print(predictions * 100)
 
 # create a figure for the training loss and accuracy
 N = np.arange(0, EPOCHS)
@@ -115,7 +117,7 @@ plt.legend(loc="upper right")
 
 # save model and figure
 print("Saving model...")
-model_name = '{model}_{date}.h5'.format(
-    model=args.model, date=date.today().strftime("%d-%m-%Y"))
+model_name = '{model}_{date}_{mae}.h5'.format(
+    model=args.model, date=date.today().strftime("%d-%m-%Y"), mae=str(mae)[:4])
 model.save_weights(os.path.join(PATH['MODEL_OUT'], model_name))
 plt.savefig(os.path.join(PATH['MODEL_OUT'], model_name.replace('.h5', '.png')))
